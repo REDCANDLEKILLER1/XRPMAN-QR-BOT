@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XRPMan QR Bot</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #000;
+            color: #0f0;
+            font-family: 'Roboto Mono', monospace;
+        }
+        .neon-border {
+            border: 1px solid #0f0;
+            box-shadow: 0 0 10px #0f0;
+        }
+        #canvas-container {
+            width: 100%;
+            max-width: 500px;
+            aspect-ratio: 1/1;
+            background: #222;
+            border: 1px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+        canvas {
+            width: 100% !important;
+            height: auto !important;
+        }
+        input[type="checkbox"] {
+            accent-color: #0f0;
+            transform: scale(1.2);
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen flex flex-col items-center">
+
+    <div class="w-full max-w-2xl space-y-6">
+        <div class="border-b border-green-500 pb-4 mb-6">
+            <h1 class="text-2xl font-bold text-green-400">XRPMan QR Bot</h1>
+            <p class="text-xs text-green-600 mt-1">PROTOCOL: DENSITY_BOOST | SAFE_ZONE_OPTIMIZATION</p>
+        </div>
+
+        <div class="grid gap-4 bg-gray-900 p-6 rounded-lg border border-gray-800">
+            <!-- URL Input -->
+            <div>
+                <label class="block text-xs uppercase mb-1 opacity-70">Target URL</label>
+                <input type="text" id="urlInput" value="https://linktr.ee/maijahtaejon" 
+                    class="w-full bg-black border border-green-700 p-3 rounded text-green-400 focus:outline-none focus:border-green-400">
+            </div>
+
+            <!-- Toggles -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="flex items-center space-x-3 bg-black p-3 rounded border border-gray-700">
+                    <input type="checkbox" id="densityBoost" checked onchange="generate()">
+                    <div>
+                        <label class="block text-sm font-bold text-white">Boost Density (Recommended)</label>
+                        <p class="text-[10px] text-gray-400">Makes matrix denser so logo covers less data.</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3 bg-black p-3 rounded border border-gray-700">
+                    <input type="checkbox" id="whiteBase" onchange="generate()">
+                    <div>
+                        <label class="block text-sm font-bold text-white">White Data Background</label>
+                        <p class="text-[10px] text-gray-400">Maximize contrast (Keeps Pink border).</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Colors -->
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs uppercase mb-1 opacity-70">Brand Color (Hex)</label>
+                    <input type="text" id="bgColor" value="#F7C1DC" 
+                        class="w-full bg-black border border-green-700 p-3 rounded text-pink-400 font-bold">
+                </div>
+                <div>
+                    <label class="block text-xs uppercase mb-1 opacity-70">Logo Size %</label>
+                    <input type="range" id="logoSizeSlider" min="5" max="25" value="13" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" oninput="generate()">
+                    <div class="text-right text-xs text-gray-500" id="sizeValue">13%</div>
+                </div>
+            </div>
+
+            <!-- Logo Upload -->
+            <div>
+                <label class="block text-xs uppercase mb-1 opacity-70">Upload Logo</label>
+                <input type="file" id="logoInput" accept="image/*" 
+                    class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-xs file:bg-green-900 file:text-green-400 hover:file:bg-green-800 cursor-pointer">
+            </div>
+        </div>
+
+        <!-- Action Area -->
+        <div class="flex flex-col items-center space-y-4">
+            <!-- Preview -->
+            <div id="canvas-container">
+                <canvas id="qrCanvas"></canvas>
+            </div>
+            
+            <p class="text-xs text-center text-pink-400 font-bold" id="scanStatus">
+                TIP: Scan the screen with your phone now to verify.
+            </p>
+
+            <button onclick="downloadQR()" id="dlBtn" class="px-8 py-3 bg-pink-600 hover:bg-pink-700 text-white font-bold rounded border border-pink-400 transition-all w-full md:w-auto uppercase tracking-wider">
+                Download 4K Image
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('qrCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Inputs
+        const urlInput = document.getElementById('urlInput');
+        const bgInput = document.getElementById('bgColor');
+        const logoInput = document.getElementById('logoInput');
+        const densityBoost = document.getElementById('densityBoost');
+        const whiteBase = document.getElementById('whiteBase');
+        const sizeSlider = document.getElementById('logoSizeSlider');
+        const sizeDisplay = document.getElementById('sizeValue');
+
+        // Setup
+        const qrSize = 4096; // 4K Resolution
+        canvas.width = qrSize;
+        canvas.height = qrSize;
+        let userLogo = null;
+
+        logoInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const img = new Image();
+                    img.onload = function() {
+                        userLogo = img;
+                        generate();
+                    }
+                    img.src = event.target.result;
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        function generate() {
+            // Update UI
+            sizeDisplay.innerText = sizeSlider.value + "%";
+
+            // Prepare Data
+            let finalLink = urlInput.value;
+            // Boost Density Trick: Add dummy parameter to make string longer -> more modules -> less error per inch
+            if (densityBoost.checked) {
+                if(finalLink.includes('?')) {
+                    finalLink += '&v=xrpman_boost';
+                } else {
+                    finalLink += '?v=xrpman_boost';
+                }
+            }
+
+            const brandColor = bgInput.value;
+            const useWhiteBase = whiteBase.checked;
+            
+            // Generate QR
+            const qr = new QRious({
+                value: finalLink,
+                size: qrSize,
+                level: 'H',
+                padding: 0, // We handle padding manually
+                background: useWhiteBase ? '#FFFFFF' : brandColor,
+                foreground: 'black'
+            });
+
+            // Draw Background (The Brand Color Canvas)
+            ctx.fillStyle = brandColor;
+            ctx.fillRect(0, 0, qrSize, qrSize);
+
+            // Calculate Padding for the QR Code inside the Brand Canvas
+            // We want a border of Brand Color
+            const margin = 200; // 4K margin
+            const innerSize = qrSize - (margin * 2);
+
+            // Draw the QR Code onto the canvas
+            // If white base is on, we draw a white rect first
+            if (useWhiteBase) {
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(margin, margin, innerSize, innerSize);
+            }
+            
+            // Draw QR
+            ctx.drawImage(qr.canvas, margin, margin, innerSize, innerSize);
+
+            // Draw Logo
+            if (userLogo) {
+                const logoPercent = parseInt(sizeSlider.value) / 100;
+                const logoSize = innerSize * logoPercent;
+                const x = (qrSize - logoSize) / 2;
+                const y = (qrSize - logoSize) / 2;
+                
+                // Border size for logo
+                const borderSize = 40; 
+
+                ctx.save();
+
+                // 1. Draw Outer Circle (Matches Background for clean cut look)
+                ctx.beginPath();
+                ctx.arc(qrSize/2, qrSize/2, (logoSize/2) + borderSize, 0, Math.PI * 2, true);
+                ctx.fillStyle = useWhiteBase ? '#FFFFFF' : brandColor;
+                ctx.fill();
+
+                // 2. Draw Clipping Circle
+                ctx.beginPath();
+                ctx.arc(qrSize/2, qrSize/2, logoSize/2, 0, Math.PI * 2, true);
+                ctx.closePath();
+                ctx.clip();
+
+                // 3. Draw Image
+                ctx.drawImage(userLogo, x, y, logoSize, logoSize);
+
+                ctx.restore();
+            }
+        }
+
+        function downloadQR() {
+            const link = document.createElement('a');
+            link.download = 'XRPMan_QR_Bot_Result.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        // Init
+        setTimeout(generate, 100);
+    </script>
+</body>
+</html>
